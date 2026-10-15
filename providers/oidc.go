@@ -11,6 +11,7 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/sessions"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
+	internaloidc "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providers/oidc"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/requests"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/util/ptr"
 	"golang.org/x/oauth2"
@@ -248,6 +249,9 @@ func (p *OIDCProvider) createSession(ctx context.Context, token *oauth2.Token, r
 				return nil, errors.New("token response did not contain an id_token")
 			}
 		default:
+			if errors.Is(err, internaloidc.ErrAudienceMismatch) {
+				return nil, fmt.Errorf("could not verify id_token: %w", err)
+			}
 			return nil, fmt.Errorf("could not verify id_token: %v", err)
 		}
 	}

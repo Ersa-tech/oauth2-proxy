@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -42,6 +43,7 @@ var _ = Describe("Verify", func() {
 		})
 		Expect(err).To(MatchError("audience from claim aud with value [1226737] does not match with " +
 			"any of allowed audiences map[7817818:{}]"))
+		Expect(errors.Is(err, ErrAudienceMismatch)).To(BeTrue())
 		Expect(result).To(BeNil())
 	})
 
@@ -147,6 +149,7 @@ var _ = Describe("Verify", func() {
 
 		Expect(err).To(MatchError("audience claims [not_exists] do not exist in claims: " +
 			"map[aud:1226737 client_id:1226737 iss:https://foo]"))
+		Expect(errors.Is(err, ErrAudienceMismatch)).To(BeTrue())
 		Expect(result).To(BeNil())
 	})
 

@@ -447,6 +447,63 @@ func (patTest *PassAccessTokenTest) getCallbackEndpoint() (httpCode int, cookie 
 	return rw.Code, cookie
 }
 
+type redeemErrorProvider struct {
+	providers.Provider
+	err error
+}
+
+func (p redeemErrorProvider) Redeem(context.Context, string, string, string) (*sessions.SessionState, error) {
+	return nil, p.err
+}
+
+func TestOAuthCallbackAudienceMismatch(t *testing.T) {
+	opts := baseTestOptions()
+	require.NoError(t, validation.Validate(opts))
+	proxy, err := NewOAuthProxy(opts, func(string) bool { return true })
+	require.NoError(t, err)
+	baseProvider := proxy.provider
+
+	csrf, err := cookies.NewCSRF(proxy.CookieOptions, "")
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name       string
+		redeemErr  error
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "audience mismatch",
+			redeemErr:  fmt.Errorf("could not verify id_token: %w", internaloidc.ErrAudienceMismatch),
+			wantStatus: http.StatusForbidden,
+			wantBody:   "You do not have permission to access this resource.",
+		},
+		{
+			name:       "other redeem error",
+			redeemErr:  errors.New("token exchange failed"),
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   "Oops! Something went wrong. For more information contact your server administrator.",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			proxy.provider = redeemErrorProvider{Provider: baseProvider, err: tc.redeemErr}
+
+			req := httptest.NewRequest(http.MethodGet, "/oauth2/callback?code=callback_code&state="+encodeState(csrf.HashOAuthState(), "%2F", false), nil)
+			csrfCookie, err := csrf.SetCookie(httptest.NewRecorder(), req)
+			require.NoError(t, err)
+			req.AddCookie(csrfCookie)
+
+			rw := httptest.NewRecorder()
+			proxy.ServeHTTP(rw, req)
+
+			assert.Equal(t, tc.wantStatus, rw.Code)
+			assert.Contains(t, rw.Body.String(), tc.wantBody)
+		})
+	}
+}
+
 func TestOAuthCallbackCSRFCookieLogging(t *testing.T) {
 	opts := baseTestOptions()
 	require.NoError(t, validation.Validate(opts))

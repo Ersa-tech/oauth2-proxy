@@ -2,11 +2,30 @@ package oidc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 )
+
+var ErrAudienceMismatch = errors.New("audience mismatch")
+
+type audienceMismatchError struct {
+	msg string
+}
+
+func (e *audienceMismatchError) Error() string {
+	return e.msg
+}
+
+func (e *audienceMismatchError) Unwrap() error {
+	return ErrAudienceMismatch
+}
+
+func audienceMismatch(format string, args ...any) error {
+	return &audienceMismatchError{msg: fmt.Sprintf(format, args...)}
+}
 
 // idTokenVerifier allows an ID Token to be verified against the issue and provided keys.
 type IDTokenVerifier interface {
@@ -80,7 +99,7 @@ func (v *idTokenVerifier) verifyAudience(token *oidc.IDToken, claims map[string]
 		}
 	}
 
-	return false, fmt.Errorf("audience claims %v do not exist in claims: %v",
+	return false, audienceMismatch("audience claims %v do not exist in claims: %v",
 		v.verificationOptions.AudienceClaims, claims)
 }
 
@@ -91,7 +110,7 @@ func (v *idTokenVerifier) isValidAudience(claim string, audience []string, allow
 		}
 	}
 
-	return false, fmt.Errorf(
+	return false, audienceMismatch(
 		"audience from claim %s with value %s does not match with any of allowed audiences %v",
 		claim, audience, allowedAudiences)
 }

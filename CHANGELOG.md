@@ -8,6 +8,8 @@
 
 ## Changes since v7.15.5
 
+- [#2808](https://github.com/oauth2-proxy/oauth2-proxy/issues/2808) fix: return 403 when an OIDC ID token audience does not match
+
 # V7.15.5
 
 ## Release Highlights

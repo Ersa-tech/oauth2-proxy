@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/sessions"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
@@ -126,6 +127,36 @@ func TestOIDCProviderRedeem(t *testing.T) {
 	assert.Equal(t, idToken, session.IDToken)
 	assert.Equal(t, refreshToken, session.RefreshToken)
 	assert.Equal(t, "123456789", session.User)
+}
+
+func TestOIDCProviderRedeemAudienceMismatch(t *testing.T) {
+	claims := defaultIDToken
+	claims.Audience = jwt.ClaimStrings{"other-client"}
+	idToken, err := newSignedTestIDToken(claims)
+	assert.NoError(t, err)
+	body, err := json.Marshal(redeemTokenResponse{
+		AccessToken:  accessToken,
+		ExpiresIn:    10,
+		TokenType:    "Bearer",
+		RefreshToken: refreshToken,
+		IDToken:      idToken,
+	})
+	assert.NoError(t, err)
+
+	server, provider := newTestOIDCSetup(body)
+	defer server.Close()
+	provider.Verifier = internaloidc.NewVerifier(oidc.NewVerifier(
+		oidcIssuer,
+		mockJWKS{},
+		&oidc.Config{ClientID: oidcClientID, SkipClientIDCheck: true},
+	), internaloidc.IDTokenVerificationOptions{
+		AudienceClaims: []string{"aud"},
+		ClientID:       oidcClientID,
+	})
+
+	session, err := provider.Redeem(context.Background(), provider.RedeemURL.String(), "code1234", "")
+	assert.Nil(t, session)
+	assert.ErrorIs(t, err, internaloidc.ErrAudienceMismatch)
 }
 
 func TestOIDCProviderRedeem_custom_userid(t *testing.T) {
